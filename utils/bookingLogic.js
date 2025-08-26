@@ -11,23 +11,58 @@ import {
 
 // First, we'll see if we already have a reservation
 async function checkForExistingBooking() {
-  let config = existingReservationConfig(process.env.AUTH_TOKEN);
-  let venueId = process.env.VENUE_ID;
+  const config = existingReservationConfig(process.env.AUTH_TOKEN);
+  const venueId = process.env.VENUE_ID;
+  const targetDate = process.env.DATE; // YYYY-MM-DD
+
   try {
     const response = await axios.request(config);
-    if (response.data.reservations[0]?.venue?.id == venueId) {
-      console.log(`You already have a reservation for tonight!`);
+    const reservations = response?.data?.reservations || [];
+
+    // Check if any reservation matches both venue and date
+    const hasSameVenueAndDate = reservations.some((r) => {
+      const resVenueId = r?.venue?.id;
+
+      // Resy objects can expose date on different fields
+      const resDateRaw = r?.date || r?.scheduled_at || r?.booked_at;
+      if (!resDateRaw) return false;
+
+      // Normalize to YYYY-MM-DD
+      const resDate =
+        typeof resDateRaw === "string" ? resDateRaw.split("T")[0] : null;
+
+      return (
+        String(resVenueId) === String(venueId) && resDate === targetDate
+      );
+    });
+
+    if (hasSameVenueAndDate) {
+      console.log(
+        `You already have a reservation for this venue on ${convertDateToLongFormat(
+          targetDate
+        )}.`
+      );
       return true;
-    } else {
-      console.log(response.data.reservations[0]?.venue?.id)
-      console.log('Found no reservations')
+    }
+
+    // If there are reservations, but not for this venue/date
+    if (reservations.length > 0) {
+      const first = reservations[0];
+      console.log(
+        `Existing upcoming reservation found at venue ${first?.venue?.id}, but not for ${targetDate}. Continuing...`
+      );
       return false;
     }
+
+    console.log("Found no upcoming reservations.");
+    return false;
   } catch (error) {
     console.log(error);
+    return false;
   }
 }
 
+  
 // Then, we'll check to see if there are any reservations available
 async function fetchDataAndParseSlots() {
   try {
